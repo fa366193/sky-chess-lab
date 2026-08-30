@@ -1,3 +1,5 @@
+import os
+
 from flask import Flask, jsonify, render_template, request, send_from_directory
 
 from chess_engine.game import ChessGame
@@ -67,4 +69,8 @@ def reset():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5050, debug=True)
+    app.run(
+        host="127.0.0.1",
+        port=int(os.environ.get("SKY_CHESS_PORT", "5050")),
+        debug=os.environ.get("SKY_CHESS_DEBUG") == "1",
+    )

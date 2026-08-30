@@ -14,6 +14,17 @@ The target calibration experience is shown in `assets/ui/calibration-concept.png
 
 ## Run the app
 
+### Easiest way on a Mac
+
+Double-click `start_sky_chess.command`. The first launch creates the Python
+environment, installs the requirements, starts the app, and opens it in your
+browser. Leave the Terminal window open while playing.
+
+If macOS blocks the first launch, Control-click the file, choose **Open**, then
+confirm **Open**.
+
+### Terminal method
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
@@ -26,6 +37,9 @@ highlighted square. Sky will respond with a legal black move. Press **Hear Sky**
 to use the browser's built-in voice.
 
 ## Calibrate the physical board
+
+The easiest route is to double-click `camera_calibration.command`. macOS may
+ask Terminal for camera access on the first run; choose **Allow**.
 
 With the chessboard fully visible to the Mac camera:
 
