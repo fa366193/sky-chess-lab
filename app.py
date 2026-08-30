@@ -81,6 +81,30 @@ def start():
     return jsonify(snapshot("You're White, so you move first. I'm watching the physical board.", "neutral"))
 
 
+@app.post("/api/talk")
+def talk():
+    transcript = (request.get_json(silent=True) or {}).get("text", "").strip().lower()
+    if not transcript:
+        return jsonify(snapshot("I didn't quite catch that. Try saying it again.", "neutral"))
+
+    if any(word in transcript for word in ("hello", "hi sky", "hey sky")):
+        reply, mood = "Hi! I'm right here with you. Take your time—I'm watching the board.", "happy"
+    elif "whose turn" in transcript or "my turn" in transcript:
+        side = "White" if game.board.turn else "Black"
+        reply, mood = f"It's {side}'s turn. You're playing {human_color.capitalize()}.", "teaching"
+    elif "repeat" in transcript or "your move" in transcript or "what move" in transcript:
+        reply, mood = "My latest move is still shown in the move card. I'll keep it there while you move the piece.", "move"
+    elif any(phrase in transcript for phrase in ("help", "hint", "what should i do")):
+        reply, mood = "Start by checking for threats, captures, and checks. Then look for a move that develops a piece or improves your king's safety.", "teaching"
+    elif "why" in transcript:
+        reply, mood = "I’m thinking about activity, safety, and control of the center. Those three ideas usually explain the purpose of an opening move.", "thinking"
+    elif any(word in transcript for word in ("thank", "thanks")):
+        reply, mood = "Always. We’re figuring this out together.", "happy"
+    else:
+        reply, mood = "I hear you. I’m still learning longer conversations, but I’m here and following the game with you.", "neutral"
+    return jsonify(snapshot(reply, mood))
+
+
 @app.post("/api/reset")
 def reset():
     game.reset()

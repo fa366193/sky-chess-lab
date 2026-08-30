@@ -8,8 +8,10 @@ and a camera-calibration tool for turning an angled Mac camera view into a
 normalized 8x8 board.
 
 Sky has eight separate transparent reaction poses in `assets/sky/reactions`.
-The UI combines pose transitions, idle breathing, speaking motion, live text,
-and voice output so she feels present rather than like a single static image.
+The UI combines pose transitions, continuous idle breathing, attention shifts,
+micro-movements, speaking motion, live text, microphone listening, and voice
+output so she feels present rather than like a single static image. Sky stops
+listening while she speaks and automatically resumes afterward.
 The target calibration experience is shown in `assets/ui/calibration-concept.png`.
 
 ## Run the app

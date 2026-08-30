@@ -33,6 +33,12 @@ class ChessGameTests(unittest.TestCase):
         self.assertEqual(data["humanColor"], "white")
         self.assertNotIn("lastSkyMove", data)
 
+    def test_sky_responds_to_spoken_turn_question(self):
+        client = app.test_client()
+        data = client.post("/api/talk", json={"text": "Sky, whose turn is it?"}).get_json()
+        self.assertIn("turn", data["message"].lower())
+        self.assertEqual(data["mood"], "teaching")
+
 
 if __name__ == "__main__":
     unittest.main()
