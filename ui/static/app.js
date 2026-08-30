@@ -27,10 +27,12 @@ let motionSeen = false;
 let settledFrames = 0;
 let detectorBusy = false;
 let expectedPhysicalMove = null;
+let sessionActive = false;
 
 function showScreen(name) { Object.entries(screens).forEach(([key,node]) => node.classList.toggle('active', key === name)); }
 
 async function enableCamera() {
+  if (stream&&stream.active) return true;
   try {
     stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}},audio:false});
     video.srcObject = stream;
@@ -41,10 +43,18 @@ async function enableCamera() {
     document.querySelector('#enable-camera').disabled = true;
     document.querySelector('#reset-corners').disabled = false;
     resizeOverlay();
+    return true;
   } catch (error) {
     help.textContent = 'Camera access is required. In your browser settings, allow camera access for 127.0.0.1, then try again.';
     connectionLabel.textContent = 'Camera permission needed';
+    return false;
   }
+}
+
+function stopCamera() {
+  if(stream)stream.getTracks().forEach(track=>track.stop());
+  stream=null;video.srcObject=null;placeholder.hidden=false;
+  connectionLabel.textContent='Camera off';
 }
 
 function resizeOverlay() {
@@ -75,6 +85,15 @@ function drawCalibration() {
 function updateSteps() {
   document.querySelector('#point-count').textContent = `${points.length} / 4 CORNERS`;
   [...document.querySelectorAll('#corner-list li')].forEach((item,index)=>item.classList.toggle('active',index===points.length));
+  const setupLines=[
+    'Great—click the top-left inner corner of the 8×8 playing grid.',
+    'Perfect. Now click the top-right inner corner.',
+    'Good. Next, click the bottom-right inner corner.',
+    'One more: click the bottom-left inner corner.',
+    'I can see the whole board now. Keep the camera and board exactly here.'
+  ];
+  document.querySelector('#setup-message').textContent=stream?setupLines[points.length]:'Hi! First, allow camera access so I can help you frame the physical board.';
+  document.querySelector('#setup-sky-image').src=`${window.SKY_ASSET_ROOT}/${points.length===4?skyAssets.happy:skyAssets.teaching}`;
   if (points.length === 4) {
     help.textContent = 'Board mapped. Keep the camera and board in this position.';
     window.setTimeout(()=>showScreen('color'),650);
@@ -91,14 +110,14 @@ view.addEventListener('click', event => {
 
 document.querySelector('#enable-camera').addEventListener('click',enableCamera);
 document.querySelector('#reset-corners').addEventListener('click',()=>{points=[];localStorage.removeItem('skyChessCalibration');drawCalibration();updateSteps();help.textContent='Click the top-left inner corner first.';});
-document.querySelector('#recalibrate').addEventListener('click',()=>{points=[];drawCalibration();updateSteps();showScreen('calibration');});
+document.querySelector('#recalibrate').addEventListener('click',()=>{clearInterval(visionTimer);visionTimer=null;points=[];drawCalibration();updateSteps();showScreen('calibration');});
 window.addEventListener('resize',resizeOverlay);
 
 document.querySelectorAll('[data-color]').forEach(button=>button.addEventListener('click',async()=>{
   humanColor=button.dataset.color;
   state=await (await fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({color:humanColor})})).json();
   document.querySelector('#color-label').textContent=humanColor.toUpperCase();
-  showScreen('play'); updatePlay(); startPresence(); initializeVoice();
+  sessionActive=true;showScreen('play'); updatePlay(); startPresence(); initializeVoice();
   expectedPhysicalMove=state.lastSkyMove||null;
   startBoardVision();
   if (!state.lastSkyMove) setTimeout(()=>speakSky(state.message),350);
@@ -146,7 +165,7 @@ function initializeVoice() {
   recognition=new Recognition();
   recognition.lang='en-US'; recognition.continuous=true; recognition.interimResults=true;
   recognition.onstart=()=>{listening=true;document.querySelector('#voice-status').classList.add('listening');document.querySelector('#voice-status').lastChild.textContent=' LISTENING';};
-  recognition.onend=()=>{listening=false;document.querySelector('#voice-status').classList.remove('listening');document.querySelector('#voice-status').lastChild.textContent=' VOICE READY';if(!speaking&&screens.play.classList.contains('active'))setTimeout(startListening,500);};
+  recognition.onend=()=>{listening=false;document.querySelector('#voice-status').classList.remove('listening');document.querySelector('#voice-status').lastChild.textContent=' VOICE READY';if(sessionActive&&!speaking&&screens.play.classList.contains('active'))setTimeout(startListening,500);};
   recognition.onerror=event=>{if(event.error==='not-allowed')document.querySelector('#voice-status').lastChild.textContent=' MICROPHONE NEEDED';};
   recognition.onresult=event=>{
     let interim='';
@@ -160,7 +179,7 @@ function initializeVoice() {
 }
 
 function startListening() {
-  if (!recognition||listening||speaking) return;
+  if (!sessionActive||!recognition||listening||speaking) return;
   try { recognition.start(); } catch (_) {}
 }
 
@@ -255,6 +274,39 @@ function startBoardVision(){
     visionTimer=setInterval(analyzeBoard,320);
   },1800);
 }
+
+function stopGameResources(){
+  sessionActive=false;
+  clearInterval(visionTimer);visionTimer=null;clearTimeout(idleTimer);idleTimer=null;
+  speechSynthesis.cancel();speaking=false;stopListening();stopCamera();
+}
+
+async function pauseGame(){
+  stopGameResources();document.querySelector('#pause-modal').hidden=false;
+}
+
+async function resumeGame(){
+  document.querySelector('#pause-modal').hidden=true;
+  const ready=await enableCamera();
+  if(!ready){document.querySelector('#pause-modal').hidden=false;return;}
+  sessionActive=true;startBoardVision();startPresence();initializeVoice();
+}
+
+async function endGame(){
+  stopGameResources();await fetch('/api/reset',{method:'POST'});document.querySelector('#end-modal').hidden=false;
+}
+
+async function newGame(){
+  document.querySelector('#end-modal').hidden=true;points=[];boardBaseline=null;expectedPhysicalMove=null;
+  localStorage.removeItem('skyChessCalibration');drawCalibration();updateSteps();showScreen('calibration');
+  document.querySelector('#enable-camera').disabled=false;document.querySelector('#enable-camera').textContent='Enable camera';
+  await enableCamera();
+}
+
+document.querySelector('#pause-game').addEventListener('click',pauseGame);
+document.querySelector('#resume-game').addEventListener('click',resumeGame);
+document.querySelector('#end-game').addEventListener('click',endGame);
+document.querySelector('#new-game').addEventListener('click',newGame);
 
 async function analyzeBoard(){
   if(detectorBusy||!boardBaseline)return;

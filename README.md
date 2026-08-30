@@ -53,6 +53,15 @@ available for difficult lighting conditions and accepts notation such as
 Camera calibration is now built into the opening screen. macOS or your browser
 may ask for camera access on the first run; choose **Allow**. The standalone
 `camera_calibration.command` remains available as a computer-vision diagnostic.
+Sky appears throughout setup and gives a new spoken-style instruction after
+each selected corner.
+
+## Camera lifecycle
+
+- **Pause game** stops the camera, visual detector, microphone, and speech.
+- **Resume game** requests the camera again and relearns the current position.
+- **End game** stops all camera and microphone access and resets the game.
+- **Start new game** turns the camera back on and returns to guided calibration.
 
 With the chessboard fully visible to the Mac camera:
 
