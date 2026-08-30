@@ -19,12 +19,10 @@
     <section class="experience">
       <aside class="sky-panel">
         <div class="eyebrow">Your decision guide</div>
-        <div class="portrait" id="portrait" data-mood="neutral" aria-label="Sky character illustration">
-          <div class="halo"></div><div class="hair back"></div><div class="neck"></div><div class="face">
-            <div class="hair fringe"></div><div class="brow left"></div><div class="brow right"></div>
-            <div class="glasses left"><i></i></div><div class="glasses right"><i></i></div><div class="bridge"></div>
-            <div class="nose"></div><div class="mouth"></div>
-          </div><div class="body"></div>
+        <div class="portrait" id="portrait" data-mood="neutral" aria-label="Sky, your animated chess guide">
+          <div class="halo"></div>
+          <img id="sky-image" src="/assets/sky/reactions/01-watching.png" alt="Sky watching the chessboard attentively">
+          <span class="presence-dot" aria-hidden="true"></span>
         </div>
         <h1>Think it through<br>with <em>Sky.</em></h1>
         <div class="speech"><span>SKY SAYS</span><p id="message">Loading the board…</p></div>
@@ -50,7 +48,7 @@
       </section>
     </section>
   </main>
+  <script>window.SKY_ASSET_ROOT = "/assets/sky/reactions";</script>
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
 </html>
-

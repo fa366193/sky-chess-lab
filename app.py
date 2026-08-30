@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 from chess_engine.game import ChessGame
 from chess_engine.sky_player import SkyPlayer
@@ -20,6 +20,11 @@ def snapshot(message=None, mood="neutral"):
 @app.get("/")
 def index():
     return render_template("index.html")
+
+
+@app.get("/assets/<path:filename>")
+def assets(filename):
+    return send_from_directory("assets", filename)
 
 
 @app.get("/api/game")

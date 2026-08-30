@@ -2,6 +2,12 @@ const boardEl = document.querySelector('#board');
 const messageEl = document.querySelector('#message');
 const selectionEl = document.querySelector('#selection');
 const portraitEl = document.querySelector('#portrait');
+const skyImageEl = document.querySelector('#sky-image');
+const skyAssets = {
+  neutral:'01-watching.png', thinking:'02-thinking.png', happy:'03-encouraging.png',
+  playful:'04-playful.png', teaching:'05-teaching.png', surprised:'06-surprised.png',
+  move:'07-my-move.png', celebrating:'08-celebrating.png'
+};
 const glyphs = {K:'♔', Q:'♕', R:'♖', B:'♗', N:'♘', P:'♙', k:'♚', q:'♛', r:'♜', b:'♝', n:'♞', p:'♟'};
 let state = null;
 let selected = null;
@@ -35,10 +41,12 @@ async function choose(name) {
   if (state.gameOver || state.turn !== 'white') return;
   if (selected && legal.includes(name)) {
     selectionEl.textContent = `${selected.toUpperCase()} → ${name.toUpperCase()} · Sky is thinking…`;
+    setSkyPose('thinking');
     const response = await fetch('/api/move', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({from:selected, to:name})});
     state = await response.json();
     selected = null; legal = [];
     update();
+    if (state.lastSkyMove) announceSkyMove();
     return;
   }
   if (!state.pieces[name] || state.pieces[name] !== state.pieces[name].toUpperCase()) {
@@ -53,11 +61,34 @@ async function choose(name) {
 
 function update() {
   messageEl.textContent = state.message;
-  portraitEl.dataset.mood = state.mood || 'neutral';
+  setSkyPose(state.mood || 'neutral');
   document.querySelector('#move-number').textContent = String(state.moveNumber).padStart(2, '0');
   document.querySelector('#turn-title').textContent = state.gameOver ? 'Game complete' : 'Your turn';
   if (!selected) selectionEl.textContent = state.check ? 'Your king is in check' : 'Select a white piece';
   render();
+}
+
+function setSkyPose(pose) {
+  const resolved = skyAssets[pose] ? pose : 'neutral';
+  const next = `${window.SKY_ASSET_ROOT}/${skyAssets[resolved]}`;
+  if (skyImageEl.getAttribute('src') === next) return;
+  portraitEl.classList.add('transitioning');
+  window.setTimeout(() => {
+    skyImageEl.src = next;
+    skyImageEl.alt = `Sky is ${resolved}`;
+    portraitEl.dataset.mood = resolved;
+    portraitEl.classList.remove('transitioning');
+  }, 150);
+}
+
+function announceSkyMove() {
+  const reaction = state.mood || 'neutral';
+  setSkyPose('move');
+  portraitEl.classList.add('speaking');
+  window.setTimeout(() => {
+    portraitEl.classList.remove('speaking');
+    setSkyPose(reaction);
+  }, 3200);
 }
 
 document.querySelector('#reset').addEventListener('click', async () => {
@@ -68,4 +99,3 @@ document.querySelector('#speak').addEventListener('click', () => {
 });
 
 fetch('/api/game').then(r => r.json()).then(data => { state = data; update(); });
-

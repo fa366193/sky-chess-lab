@@ -3,9 +3,14 @@
 A physical AI chess tutor by Decision Systems Lab, featuring Sky.
 
 This repository contains the hackathon MVP: a polished browser interface, a
-legal chess game powered by `python-chess`, Sky's coaching reactions, and a
-camera-calibration tool for turning an angled Mac camera view into a normalized
-8x8 board.
+legal chess game powered by `python-chess`, Sky's animated coaching reactions,
+and a camera-calibration tool for turning an angled Mac camera view into a
+normalized 8x8 board.
+
+Sky has eight separate transparent reaction poses in `assets/sky/reactions`.
+The UI combines pose transitions, idle breathing, speaking motion, live text,
+and voice output so she feels present rather than like a single static image.
+The target calibration experience is shown in `assets/ui/calibration-concept.png`.
 
 ## Run the app
 
@@ -57,4 +62,3 @@ vision/calibration.py   perspective calibration
 ui/templates/           interface markup
 ui/static/              visual design and interactions
 ```
-
