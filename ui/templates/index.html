@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sky Chess Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div class="brand"><span class="brand-mark">DS</span><span>Decision Systems Lab</span></div>
+      <div class="product">Sky Chess <span>Lab 01</span></div>
+    </header>
+
+    <section class="experience">
+      <aside class="sky-panel">
+        <div class="eyebrow">Your decision guide</div>
+        <div class="portrait" id="portrait" data-mood="neutral" aria-label="Sky character illustration">
+          <div class="halo"></div><div class="hair back"></div><div class="neck"></div><div class="face">
+            <div class="hair fringe"></div><div class="brow left"></div><div class="brow right"></div>
+            <div class="glasses left"><i></i></div><div class="glasses right"><i></i></div><div class="bridge"></div>
+            <div class="nose"></div><div class="mouth"></div>
+          </div><div class="body"></div>
+        </div>
+        <h1>Think it through<br>with <em>Sky.</em></h1>
+        <div class="speech"><span>SKY SAYS</span><p id="message">Loading the board…</p></div>
+        <div class="sky-actions">
+          <button class="text-button" id="speak">◖ Hear Sky</button>
+          <button class="text-button" id="reset">↻ New game</button>
+        </div>
+      </aside>
+
+      <section class="game-panel">
+        <div class="game-heading">
+          <div><span class="eyebrow">Live position</span><h2 id="turn-title">Your turn</h2></div>
+          <div class="move-count">MOVE <strong id="move-number">01</strong></div>
+        </div>
+        <div class="board-wrap">
+          <div class="board" id="board" aria-label="Interactive chessboard"></div>
+          <div class="file-labels"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
+        </div>
+        <div class="status-line">
+          <span class="status-dot"></span><span id="selection">Select a white piece</span>
+          <span class="legend"><i></i> Legal destination</span>
+        </div>
+      </section>
+    </section>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
+
