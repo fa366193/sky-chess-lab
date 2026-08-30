@@ -32,14 +32,20 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Open <http://127.0.0.1:5050>. Click one of your white pieces, then click a
-highlighted square. Sky will respond with a legal black move. Press **Hear Sky**
-to use the browser's built-in voice.
+Open <http://127.0.0.1:5050>. The app immediately requests the Mac camera and
+walks through four-corner calibration of the physical board. After calibration,
+choose White or Black and the interface transforms into Sky sitting at her
+desk. There is intentionally no digital chessboard in the play interface.
+
+Press **Hear Sky** to use the browser's built-in voice. Until automatic visual
+move recognition is enabled, the collapsible recovery control beneath the room
+scene accepts a physical move in UCI notation such as `e2e4`.
 
 ## Calibrate the physical board
 
-The easiest route is to double-click `camera_calibration.command`. macOS may
-ask Terminal for camera access on the first run; choose **Allow**.
+Camera calibration is now built into the opening screen. macOS or your browser
+may ask for camera access on the first run; choose **Allow**. The standalone
+`camera_calibration.command` remains available as a computer-vision diagnostic.
 
 With the chessboard fully visible to the Mac camera:
 

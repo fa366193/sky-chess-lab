@@ -9,6 +9,7 @@ from chess_engine.sky_player import SkyPlayer
 app = Flask(__name__, template_folder="ui/templates", static_folder="ui/static")
 game = ChessGame()
 sky = SkyPlayer()
+human_color = "white"
 
 
 def snapshot(message=None, mood="neutral"):
@@ -16,6 +17,7 @@ def snapshot(message=None, mood="neutral"):
         **game.snapshot(),
         "message": message or "Your move. Pick a piece and let's think it through.",
         "mood": mood,
+        "humanColor": human_color,
     }
 
 
@@ -62,10 +64,27 @@ def move():
     return jsonify(data)
 
 
+@app.post("/api/start")
+def start():
+    global human_color
+    payload = request.get_json(silent=True) or {}
+    human_color = payload.get("color", "white")
+    if human_color not in ("white", "black"):
+        human_color = "white"
+    game.reset()
+    if human_color == "black":
+        sky_move = sky.choose_move(game.board)
+        game.push(sky_move)
+        data = snapshot(f"I'll take White. My first move is {game.describe_move(sky_move)}. Make that move for me, then we'll begin.", "move")
+        data["lastSkyMove"] = sky_move.uci()
+        return jsonify(data)
+    return jsonify(snapshot("You're White, so you move first. I'm watching the physical board.", "neutral"))
+
+
 @app.post("/api/reset")
 def reset():
     game.reset()
-    return jsonify(snapshot("Fresh board, fresh decisions. You have White.", "happy"))
+    return jsonify(snapshot("Fresh board, fresh decisions.", "happy"))
 
 
 if __name__ == "__main__":

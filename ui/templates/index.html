@@ -1,54 +1,24 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sky Chess Lab</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
-  <main class="shell">
-    <header>
-      <div class="brand"><span class="brand-mark">DS</span><span>Decision Systems Lab</span></div>
-      <div class="product">Sky Chess <span>Lab 01</span></div>
-    </header>
-
-    <section class="experience">
-      <aside class="sky-panel">
-        <div class="eyebrow">Your decision guide</div>
-        <div class="portrait" id="portrait" data-mood="neutral" aria-label="Sky, your animated chess guide">
-          <div class="halo"></div>
-          <img id="sky-image" src="/assets/sky/reactions/01-watching.png" alt="Sky watching the chessboard attentively">
-          <span class="presence-dot" aria-hidden="true"></span>
-        </div>
-        <h1>Think it through<br>with <em>Sky.</em></h1>
-        <div class="speech"><span>SKY SAYS</span><p id="message">Loading the board…</p></div>
-        <div class="sky-actions">
-          <button class="text-button" id="speak">◖ Hear Sky</button>
-          <button class="text-button" id="reset">↻ New game</button>
-        </div>
-      </aside>
-
-      <section class="game-panel">
-        <div class="game-heading">
-          <div><span class="eyebrow">Live position</span><h2 id="turn-title">Your turn</h2></div>
-          <div class="move-count">MOVE <strong id="move-number">01</strong></div>
-        </div>
-        <div class="board-wrap">
-          <div class="board" id="board" aria-label="Interactive chessboard"></div>
-          <div class="file-labels"><span>A</span><span>B</span><span>C</span><span>D</span><span>E</span><span>F</span><span>G</span><span>H</span></div>
-        </div>
-        <div class="status-line">
-          <span class="status-dot"></span><span id="selection">Select a white piece</span>
-          <span class="legend"><i></i> Legal destination</span>
-        </div>
-      </section>
-    </section>
-  </main>
-  <script>window.SKY_ASSET_ROOT = "/assets/sky/reactions";</script>
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
-</body>
-</html>
+<main class="app-shell">
+  <header><div class="brand"><span class="brand-mark"><i></i></span><strong>Decision Systems Lab</strong></div><div class="connection"><span class="connection-dot"></span><span id="connection-label">Connecting camera…</span></div></header>
+  <section class="screen active" id="calibration-screen">
+    <div class="calibration-copy"><span class="step-label">Setup · Camera calibration</span><h1>Let’s map your<br><em>physical board.</em></h1><p>Keep the entire 8×8 playing grid visible. Click the four inner corners in order so I know exactly where to watch.</p>
+      <ol id="corner-list"><li class="active"><b>1</b><span>Top left</span></li><li><b>2</b><span>Top right</span></li><li><b>3</b><span>Bottom right</span></li><li><b>4</b><span>Bottom left</span></li></ol>
+      <div class="calibration-actions"><button class="primary" id="enable-camera">Enable camera</button><button class="secondary" id="reset-corners" disabled>Reset points</button></div><p class="permission-note" id="camera-help">Your video stays on this Mac and is used only to read the board.</p>
+    </div>
+    <div class="camera-card"><div class="camera-top"><span>LIVE MAC CAMERA</span><span id="point-count">0 / 4 CORNERS</span></div><div class="camera-view" id="camera-view"><video id="camera" autoplay muted playsinline></video><canvas id="camera-overlay"></canvas><div class="camera-placeholder" id="camera-placeholder"><span>◉</span><p>Waiting for camera permission</p></div></div><div class="camera-footer"><span>All four board corners must remain visible</span><span class="live-badge">● LIVE</span></div></div>
+  </section>
+  <section class="screen" id="color-screen"><div class="room-scene compact"><div class="room-copy"><span class="step-label">Board calibrated</span><h1>Which side would<br>you like to play?</h1><p>I’ll take the other color. Set the physical pieces in their starting positions before choosing.</p><div class="color-choices"><button data-color="white"><span class="piece">♔</span><b>Play White</b><small>You move first</small></button><button data-color="black"><span class="piece dark-piece">♚</span><b>Play Black</b><small>Sky moves first</small></button></div></div><div class="sky-wrap"><img src="/assets/sky/reactions/01-watching.png" alt="Sky waiting at her desk"></div><div class="desk"><div class="mug">☁</div><div class="notebook">IDEAS<br><i></i><i></i><i></i></div><div class="plant">♣</div></div></div></section>
+  <section class="screen" id="play-screen"><div class="play-status"><span><i></i> BOARD CONNECTED</span><button id="recalibrate">Recalibrate camera</button></div><div class="room-scene"><div class="dialogue-card"><span>SKY SAYS</span><p id="message">I’m ready when you are.</p><button id="speak">◖ Hear Sky</button></div><div class="move-card" id="move-card"><span>MY MOVE</span><strong id="move-notation">—</strong><p id="move-instruction">I’m watching the physical chessboard.</p></div><div class="sky-wrap animated" id="portrait"><img id="sky-image" src="/assets/sky/reactions/01-watching.png" alt="Sky sitting across from you"></div><div class="desk"><div class="mug">☁</div><div class="notebook">IDEAS<br><i></i><i></i><i></i></div><div class="plant">♣</div></div><div class="turn-pill"><span class="connection-dot"></span><strong id="turn-label">YOUR TURN</strong><span id="color-label">WHITE</span></div></div><details class="move-fallback"><summary>Camera didn’t recognize a move?</summary><form id="move-form"><label>Enter the physical move <input id="move-input" placeholder="e2e4" maxlength="5" autocomplete="off"></label><button class="primary">Confirm move</button></form></details></section>
+</main>
+<script>window.SKY_ASSET_ROOT = "/assets/sky/reactions";</script><script src="{{ url_for('static', filename='app.js') }}"></script>
+</body></html>
