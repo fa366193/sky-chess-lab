@@ -39,9 +39,14 @@ walks through four-corner calibration of the physical board. After calibration,
 choose White or Black and the interface transforms into Sky sitting at her
 desk. There is intentionally no digital chessboard in the play interface.
 
-Press **Hear Sky** to use the browser's built-in voice. Until automatic visual
-move recognition is enabled, the collapsible recovery control beneath the room
-scene accepts a physical move in UCI notation such as `e2e4`.
+Press **Hear Sky** to use the browser's built-in voice. After color selection,
+the camera learns a baseline of all 64 physical squares. It waits for hand
+motion to finish, compares the settled position with that baseline, and accepts
+only a changed-square pair that matches a legal chess move. When Sky announces
+a move, the detector switches to synchronization mode until her physical piece
+has been moved. The collapsible recovery control beneath the room scene remains
+available for difficult lighting conditions and accepts notation such as
+`e2e4`.
 
 ## Calibrate the physical board
 
@@ -67,9 +72,9 @@ and `Q` to quit.
 - [x] Sky opponent and coaching dialogue
 - [x] Voice output
 - [x] Four-corner camera calibration
-- [ ] Occupancy baseline from the physical board
-- [ ] Lift/drop move detection
-- [ ] Connect physical moves to the game loop
+- [x] Occupancy/appearance baseline from the physical board
+- [x] Settled-frame physical move detection
+- [x] Connect detected physical moves to the game loop
 - [ ] Stockfish evaluation and difficulty controls
 - [ ] Addressable physical lighting
 
