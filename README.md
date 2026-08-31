@@ -43,7 +43,7 @@ Press **Hear Sky** to use the browser's built-in voice. After color selection,
 the camera learns a baseline of all 64 physical squares. It waits for hand
 motion to finish, compares the settled position with that baseline, and accepts
 only a changed-square pair that belongs to the player's selected color and
-matches a legal move. Board orientation is locked from the selected side. When
+matches a legal move. Board orientation is learned during verification. When
 Sky announces a move, the detector switches to strict synchronization mode and
 accepts only her exact announced origin and destination. A wrong destination
 produces a spoken correction without advancing the game. The collapsible
@@ -77,6 +77,12 @@ The wizard averages twelve starting frames to learn per-square camera noise.
 When a test piece is returned, Sky checks only the involved square or squares
 against their individual noise tolerances, so exposure flicker elsewhere on the
 board cannot block confirmation.
+
+Before comparing squares, the detector subtracts the median whole-board color
+and edge shift from every camera frame. This filters automatic exposure and
+white-balance drift. If more than twelve squares still appear to change at once,
+the frame is treated as a camera adjustment—not a chess move—and Sky waits for
+the image to settle.
 
 ## Camera lifecycle
 

@@ -171,8 +171,9 @@ async function learnVerificationBaseline(){
   }
   if(samples.length<8)return false;
   verificationBaseline=Array.from({length:64},(_,square)=>Array.from({length:4},(_,feature)=>samples.reduce((sum,frame)=>sum+frame[square][feature],0)/samples.length));
-  verificationNoise=Array.from({length:64},(_,square)=>Math.max(0.6,...samples.map(frame=>featureDistance(frame[square],verificationBaseline[square]))));
-  verificationPrevious=samples[samples.length-1];
+  const compensated=samples.map(frame=>compensateLighting(frame,verificationBaseline));
+  verificationNoise=Array.from({length:64},(_,square)=>Math.max(0.6,...compensated.map(frame=>featureDistance(frame[square],verificationBaseline[square]))));
+  verificationPrevious=compensated[compensated.length-1];
   return true;
 }
 
@@ -183,6 +184,8 @@ function squareIsAtBaseline(features,square){const index=cameraIndex(square);ret
 function stableVerificationChanges(current){
   const scores=current.map((item,index)=>({index,score:featureDistance(item,verificationBaseline[index])})).sort((a,b)=>b.score-a.score);
   const changed=scores.filter(item=>item.score>squareChangeThreshold(item.index)).slice(0,6);
+  const allChanged=scores.filter(item=>item.score>squareChangeThreshold(item.index));
+  if(allChanged.length>12){verificationFrames=0;verificationSignature='';document.querySelector('#verification-reading').textContent=`Camera is adjusting lighting (${allChanged.length} squares). Keep still…`;return null;}
   const live=Math.max(...current.map((item,index)=>featureDistance(item,verificationPrevious[index])));
   verificationPrevious=current;
   const signature=changed.map(item=>item.index).sort((a,b)=>a-b).join(',');
@@ -203,7 +206,8 @@ function advanceAfterReturn(nextStep,current){
 }
 
 function analyzeVerification(){
-  const current=captureFeatures();if(!current)return;
+  const raw=captureFeatures();if(!raw)return;
+  const current=compensateLighting(raw,verificationBaseline);
   if([1,3,5,7].includes(verificationStep)){
     if(!advanceAfterReturn(verificationStep+1,current))return;
     if(verificationStep===8)finishVerification();
@@ -385,6 +389,11 @@ function captureFeatures() {
 }
 
 function featureDistance(a,b){return Math.abs(a[0]-b[0])*.28+Math.abs(a[1]-b[1])*.38+Math.abs(a[2]-b[2])*.22+Math.abs(a[3]-b[3])*.12;}
+function median(values){const sorted=[...values].sort((a,b)=>a-b);const middle=Math.floor(sorted.length/2);return sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2;}
+function compensateLighting(features,baseline){
+  const shift=Array.from({length:4},(_,feature)=>median(features.map((square,index)=>square[feature]-baseline[index][feature])));
+  return features.map(square=>square.map((value,feature)=>value-shift[feature]));
+}
 function cameraSquare(index){const row=Math.floor(index/8),col=index%8;const file=boardFlipped?7-col:col;const rank=boardFlipped?row+1:8-row;return 'abcdefgh'[file]+rank;}
 function cameraIndex(square){const file='abcdefgh'.indexOf(square[0]),rank=Number(square[1]);const col=boardFlipped?7-file:file;const row=boardFlipped?rank-1:8-rank;return row*8+col;}
 function pieceBelongsToHuman(symbol){if(!symbol)return false;return humanColor==='white'?symbol===symbol.toUpperCase():symbol===symbol.toLowerCase();}
@@ -439,7 +448,8 @@ document.querySelector('#new-game').addEventListener('click',newGame);
 
 async function analyzeBoard(){
   if(detectorBusy||!boardBaseline)return;
-  const current=captureFeatures();if(!current)return;
+  const rawCurrent=captureFeatures();if(!rawCurrent)return;
+  const current=compensateLighting(rawCurrent,boardBaseline);
   const liveScores=current.map((item,i)=>featureDistance(item,previousFeatures[i]));
   const liveMotion=liveScores.reduce((sum,score)=>sum+score,0)/64;
   const peakMotion=Math.max(...liveScores);
@@ -447,6 +457,7 @@ async function analyzeBoard(){
   previousFeatures=current;
   const changed=changes.filter(change=>change.score>learnedChangeThreshold);
   document.querySelector('#vision-meter').textContent=`Δ ${changes[0].score.toFixed(1)} · ${changed.length} ${changed.length===1?'square':'squares'}`;
+  if(changed.length>12){stableSignature='';stableSignatureFrames=0;settledFrames=0;setBoardWatch('CAMERA ADJUSTING LIGHT — HOLD STILL','learning');return;}
   if(peakMotion>7.5){motionSeen=true;settledFrames=0;stableSignatureFrames=0;setBoardWatch('I SEE MOVEMENT — FINISH THE MOVE','motion');return;}
   if(changed.length<1){stableSignature='';stableSignatureFrames=0;return;}
   const signature=changed.slice(0,6).map(change=>change.index).sort((a,b)=>a-b).join(',');
@@ -462,13 +473,13 @@ async function analyzeBoard(){
     if(expectedPhysicalMove){
       const syncResult=checkSkyPlacement(candidates,expectedPhysicalMove);
       if(syncResult.correct){
-        boardBaseline=current;expectedPhysicalMove=null;setBoardWatch('SKY’S MOVE CONFIRMED');message.textContent='Perfect—that is exactly where I wanted my piece. The physical board and I are synchronized. Your turn.';setSkyPose('happy');speakSky(message.textContent);return;
+        boardBaseline=rawCurrent;previousFeatures=rawCurrent;expectedPhysicalMove=null;setBoardWatch('SKY’S MOVE CONFIRMED');message.textContent='Perfect—that is exactly where I wanted my piece. The physical board and I are synchronized. Your turn.';setSkyPose('happy');speakSky(message.textContent);return;
       }
       setBoardWatch('SKY’S PIECE IS ON THE WRONG SQUARE','error');
       message.textContent=syncResult.message;setSkyPose('teaching');speakSky(message.textContent);return;
     }
     const detected=await inferLegalMove(candidates);
-    if(detected){boardBaseline=current;state=detected;expectedPhysicalMove=state.lastSkyMove||null;updatePlay();setBoardWatch(expectedPhysicalMove?'WAITING FOR SKY’S PIECE':'WATCHING PHYSICAL BOARD');}
+    if(detected){boardBaseline=rawCurrent;previousFeatures=rawCurrent;state=detected;expectedPhysicalMove=state.lastSkyMove||null;updatePlay();setBoardWatch(expectedPhysicalMove?'WAITING FOR SKY’S PIECE':'WATCHING PHYSICAL BOARD');}
     else{setBoardWatch('MOVE UNCLEAR — TRY AGAIN','error');message.textContent='I saw the board change, but I couldn’t match it to a legal move. Put the pieces back and try once more, or use the recovery field below.';setSkyPose('surprised');}
   }finally{detectorBusy=false;}
 }
