@@ -43,7 +43,9 @@ class SkyPlayer:
         if engine:
             try:
                 return engine.play(board, chess.engine.Limit(time=0.35)).move
-            except (chess.engine.EngineError, chess.engine.EngineTerminatedError):
+            except Exception:
+                # A local engine can be interrupted by app restarts. The legal
+                # rule-based player below keeps the game responsive.
                 pass
             finally:
                 try:

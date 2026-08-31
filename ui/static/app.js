@@ -29,6 +29,8 @@ let detectorBusy = false;
 let expectedPhysicalMove = null;
 let sessionActive = false;
 let boardFlipped = false;
+let stableSignature = '';
+let stableSignatureFrames = 0;
 
 function showScreen(name) { Object.entries(screens).forEach(([key,node]) => node.classList.toggle('active', key === name)); }
 
@@ -269,7 +271,7 @@ function setBoardWatch(text,stateName='watching'){
 }
 
 function startBoardVision(){
-  clearInterval(visionTimer);boardBaseline=null;previousFeatures=null;motionSeen=false;settledFrames=0;
+  clearInterval(visionTimer);boardBaseline=null;previousFeatures=null;motionSeen=false;settledFrames=0;stableSignature='';stableSignatureFrames=0;
   setBoardWatch('HOLD STILL — LEARNING POSITION','learning');
   setTimeout(()=>{
     boardBaseline=captureFeatures();previousFeatures=boardBaseline;
@@ -315,16 +317,23 @@ document.querySelector('#new-game').addEventListener('click',newGame);
 async function analyzeBoard(){
   if(detectorBusy||!boardBaseline)return;
   const current=captureFeatures();if(!current)return;
-  const liveMotion=current.reduce((sum,item,i)=>sum+featureDistance(item,previousFeatures[i]),0)/64;
+  const liveScores=current.map((item,i)=>featureDistance(item,previousFeatures[i]));
+  const liveMotion=liveScores.reduce((sum,score)=>sum+score,0)/64;
+  const peakMotion=Math.max(...liveScores);
   const changes=current.map((item,i)=>({index:i,score:featureDistance(item,boardBaseline[i])})).sort((a,b)=>b.score-a.score);
   previousFeatures=current;
-  if(liveMotion>5.5){motionSeen=true;settledFrames=0;setBoardWatch('I SEE YOUR HAND — KEEP MOVING','motion');return;}
-  if(!motionSeen)return;
-  if(liveMotion<2.2)settledFrames++;else settledFrames=0;
-  if(settledFrames<3)return;
+  const changed=changes.filter(change=>change.score>4.2);
+  document.querySelector('#vision-meter').textContent=`Δ ${changes[0].score.toFixed(1)} · ${changed.length} ${changed.length===1?'square':'squares'}`;
+  if(peakMotion>7.5){motionSeen=true;settledFrames=0;stableSignatureFrames=0;setBoardWatch('I SEE MOVEMENT — FINISH THE MOVE','motion');return;}
+  if(changed.length<1){stableSignature='';stableSignatureFrames=0;return;}
+  const signature=changed.slice(0,6).map(change=>change.index).sort((a,b)=>a-b).join(',');
+  if(signature===stableSignature)stableSignatureFrames++;else{stableSignature=signature;stableSignatureFrames=1;}
+  if(liveMotion<2.8)settledFrames++;else settledFrames=0;
+  if(stableSignatureFrames<4||settledFrames<3){setBoardWatch('BOARD CHANGED — HOLD STILL','thinking');return;}
   motionSeen=false;settledFrames=0;
-  const candidates=changes.filter(change=>change.score>7).slice(0,6);
-  if(candidates.length<1)return;
+  stableSignatureFrames=0;
+  const candidates=changed.slice(0,6);
+  if(candidates.length<2){setBoardWatch('I SEE ONE SQUARE — WAITING FOR THE SECOND','thinking');return;}
   detectorBusy=true;setBoardWatch('CHECKING MOVE…','thinking');
   try{
     if(expectedPhysicalMove){

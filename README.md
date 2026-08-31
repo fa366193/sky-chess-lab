@@ -51,6 +51,10 @@ recovery control beneath the room scene remains
 available for difficult lighting conditions and accepts notation such as
 `e2e4`.
 
+The play header includes a live vision meter (`Δ score · changed squares`). A
+completed move should settle with at least two changed squares. This makes
+lighting, framing, and sensitivity problems visible instead of silently failing.
+
 Sky uses Stockfish 18 at bounded strength for strategic move selection. The
 rule-based legal player remains available automatically if Stockfish is not
 installed.
