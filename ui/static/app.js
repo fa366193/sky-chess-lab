@@ -38,6 +38,7 @@ let verificationStep = -1;
 let verificationSignature = '';
 let verificationFrames = 0;
 let learnedChangeThreshold = 4.2;
+let verificationNoise = Array(64).fill(1);
 
 function showScreen(name) { Object.entries(screens).forEach(([key,node]) => node.classList.toggle('active', key === name)); }
 
@@ -103,7 +104,7 @@ function updateSteps() {
     'Perfect. Now click the top-right inner corner.',
     'Good. Next, click the bottom-right inner corner.',
     'One more: click the bottom-left inner corner.',
-    'I can see the whole board now. Keep the camera and board exactly here.'
+    'I can see the whole board now. Keep it still while I learn normal camera flicker, then I’ll ask you to remove specific pawns.'
   ];
   document.querySelector('#setup-message').textContent=stream?setupLines[points.length]:'Hi! First, allow camera access so I can help you frame the physical board.';
   document.querySelector('#setup-sky-image').src=`${window.SKY_ASSET_ROOT}/${points.length===4?skyAssets.happy:skyAssets.teaching}`;
@@ -125,10 +126,10 @@ document.querySelector('#recalibrate').addEventListener('click',()=>{clearInterv
 window.addEventListener('resize',resizeOverlay);
 
 const verificationInstructions=[
-  ['Find the white side','Lift the white pawn on e2 and hold it above the board.'],
-  ['White identified','Return that white pawn to e2.'],
-  ['Find the black side','Lift the black pawn on e7 and hold it above the board.'],
-  ['Black identified','Return that black pawn to e7.'],
+  ['Find the white side','Remove the white pawn from e2 completely. Hold it in your hand, outside the board, until I confirm it.'],
+  ['White identified','Now place that white pawn back on e2, remove your hand, and keep the board still.'],
+  ['Find the black side','Remove the black pawn from e7 completely. Hold it in your hand, outside the board, until I confirm it.'],
+  ['Black identified','Now place that black pawn back on e7, remove your hand, and keep the board still.'],
   ['Test a white move','Move the white pawn from e2 to e4, then remove your hand.'],
   ['Reset the white pawn','Return the white pawn from e4 to e2.'],
   ['Test a black move','Move the black pawn from e7 to e5, then remove your hand.'],
@@ -154,20 +155,34 @@ function beginSmartVerification(){
   document.querySelector('#reset-corners').textContent='Restart setup';
   help.textContent='Now Sky will verify orientation, piece colors, and full move recognition.';
   document.querySelector('#setup-message').textContent='Great. Keep every piece in its normal starting square while I learn the board.';
-  setTimeout(()=>{
-    verificationBaseline=captureFeatures();verificationPrevious=verificationBaseline;
-    if(!verificationBaseline){document.querySelector('#verification-reading').textContent='Camera frame unavailable. Restart setup.';return;}
+  learnVerificationBaseline().then(ready=>{
+    if(!ready){document.querySelector('#verification-reading').textContent='Camera frame unavailable. Restart setup.';return;}
     setVerificationPrompt(0);
     verificationTimer=setInterval(analyzeVerification,300);
-  },1800);
+  });
+}
+
+async function learnVerificationBaseline(){
+  const samples=[];
+  for(let i=0;i<12;i++){
+    await new Promise(resolve=>setTimeout(resolve,180));
+    const frame=captureFeatures();if(frame)samples.push(frame);
+    document.querySelector('#verification-reading').textContent=`Learning camera noise ${samples.length} / 12`;
+  }
+  if(samples.length<8)return false;
+  verificationBaseline=Array.from({length:64},(_,square)=>Array.from({length:4},(_,feature)=>samples.reduce((sum,frame)=>sum+frame[square][feature],0)/samples.length));
+  verificationNoise=Array.from({length:64},(_,square)=>Math.max(0.6,...samples.map(frame=>featureDistance(frame[square],verificationBaseline[square]))));
+  verificationPrevious=samples[samples.length-1];
+  return true;
 }
 
 function verificationIndex(square,flipped){const file='abcdefgh'.indexOf(square[0]),rank=Number(square[1]);const col=flipped?7-file:file;const row=flipped?rank-1:8-rank;return row*8+col;}
-function closeToBaseline(features){return Math.max(...features.map((item,index)=>featureDistance(item,verificationBaseline[index])))<3.2;}
+function squareChangeThreshold(index){return Math.max(learnedChangeThreshold,verificationNoise[index]*3+1.2);}
+function squareIsAtBaseline(features,square){const index=cameraIndex(square);return featureDistance(features[index],verificationBaseline[index])<Math.max(3.2,verificationNoise[index]*3+1.5);}
 
 function stableVerificationChanges(current){
   const scores=current.map((item,index)=>({index,score:featureDistance(item,verificationBaseline[index])})).sort((a,b)=>b.score-a.score);
-  const changed=scores.filter(item=>item.score>learnedChangeThreshold).slice(0,6);
+  const changed=scores.filter(item=>item.score>squareChangeThreshold(item.index)).slice(0,6);
   const live=Math.max(...current.map((item,index)=>featureDistance(item,verificationPrevious[index])));
   verificationPrevious=current;
   const signature=changed.map(item=>item.index).sort((a,b)=>a-b).join(',');
@@ -178,9 +193,13 @@ function stableVerificationChanges(current){
 
 function containsSquares(changes,squares){const seen=new Set(changes.map(item=>item.index));return squares.every(square=>seen.has(cameraIndex(square)));}
 
+function returnSquaresForStep(step){return step===1?['e2']:step===3?['e7']:step===5?['e2','e4']:['e7','e5'];}
 function advanceAfterReturn(nextStep,current){
-  if(!closeToBaseline(current))return false;
-  verificationBaseline=current;verificationPrevious=current;setVerificationPrompt(nextStep);return true;
+  const required=returnSquaresForStep(verificationStep);
+  const readings=required.map(square=>`${square} ${featureDistance(current[cameraIndex(square)],verificationBaseline[cameraIndex(square)]).toFixed(1)}`);
+  document.querySelector('#verification-reading').textContent=`Waiting for starting position · ${readings.join(' · ')}`;
+  if(!required.every(square=>squareIsAtBaseline(current,square)))return false;
+  verificationPrevious=current;setVerificationPrompt(nextStep,`${required.join(' and ')} restored correctly.`);return true;
 }
 
 function analyzeVerification(){

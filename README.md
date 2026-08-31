@@ -73,6 +73,10 @@ identifies the black `e7` pawn, recognizes `e2 → e4`, and recognizes `e7 → e
 Both pawns must be returned to their starting squares. These checks determine
 physical orientation and tune the change threshold from the actual camera,
 pieces, and lighting instead of inferring orientation from the player's color.
+The wizard averages twelve starting frames to learn per-square camera noise.
+When a test piece is returned, Sky checks only the involved square or squares
+against their individual noise tolerances, so exposure flicker elsewhere on the
+board cannot block confirmation.
 
 ## Camera lifecycle
 
