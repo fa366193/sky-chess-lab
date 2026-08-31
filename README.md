@@ -54,6 +54,10 @@ available for difficult lighting conditions and accepts notation such as
 The play header includes a live vision meter (`Δ score · changed squares`). A
 completed move should settle with at least two changed squares. This makes
 lighting, framing, and sensitivity problems visible instead of silently failing.
+Play mode learns twelve frames instead of trusting a single starting image and
+measures square texture plus horizontal and vertical edges. A move is submitted
+only after localized physical motion settles and one legal origin/destination
+pair scores clearly above every competing legal move.
 
 Sky uses Stockfish 18 at bounded strength for strategic move selection. The
 rule-based legal player remains available automatically if Stockfish is not

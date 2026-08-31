@@ -170,7 +170,7 @@ async function learnVerificationBaseline(){
     document.querySelector('#verification-reading').textContent=`Learning camera noise ${samples.length} / 12`;
   }
   if(samples.length<8)return false;
-  verificationBaseline=Array.from({length:64},(_,square)=>Array.from({length:4},(_,feature)=>samples.reduce((sum,frame)=>sum+frame[square][feature],0)/samples.length));
+  verificationBaseline=Array.from({length:64},(_,square)=>Array.from({length:samples[0][square].length},(_,feature)=>samples.reduce((sum,frame)=>sum+frame[square][feature],0)/samples.length));
   const compensated=samples.map(frame=>compensateLighting(frame,verificationBaseline));
   verificationNoise=Array.from({length:64},(_,square)=>Math.max(0.6,...compensated.map(frame=>featureDistance(frame[square],verificationBaseline[square]))));
   verificationPrevious=compensated[compensated.length-1];
@@ -375,23 +375,29 @@ function captureFeatures() {
     const down=boardPoint((col+.5)/8,(row+.72)/8);
     const rx=Math.max(3,Math.abs(right.x-center.x)*width);
     const ry=Math.max(3,Math.abs(down.y-center.y)*height);
-    let r=0,g=0,b=0,edge=0,count=0;
+    let r=0,g=0,b=0,edge=0,luma=0,lumaSquared=0,count=0;
     const cx=center.x*width,cy=center.y*height;
     for(let y=Math.max(1,Math.floor(cy-ry));y<Math.min(height-1,Math.ceil(cy+ry));y+=2){
       for(let x=Math.max(1,Math.floor(cx-rx));x<Math.min(width-1,Math.ceil(cx+rx));x+=2){
         const i=(y*width+x)*4;r+=image[i];g+=image[i+1];b+=image[i+2];
-        const j=(y*width+x+1)*4;edge+=Math.abs(image[i]-image[j])+Math.abs(image[i+1]-image[j+1])+Math.abs(image[i+2]-image[j+2]);count++;
+        const value=image[i]*.299+image[i+1]*.587+image[i+2]*.114;
+        luma+=value;lumaSquared+=value*value;
+        const rightIndex=(y*width+x+1)*4,downIndex=((y+1)*width+x)*4;
+        const rightLuma=image[rightIndex]*.299+image[rightIndex+1]*.587+image[rightIndex+2]*.114;
+        const downLuma=image[downIndex]*.299+image[downIndex+1]*.587+image[downIndex+2]*.114;
+        edge+=Math.abs(value-rightLuma)+Math.abs(value-downLuma);count++;
       }
     }
-    features.push([r/count,g/count,b/count,edge/count]);
+    const meanLuma=luma/count;
+    features.push([r/count,g/count,b/count,edge/count,Math.sqrt(Math.max(0,lumaSquared/count-meanLuma*meanLuma))]);
   }
   return features;
 }
 
-function featureDistance(a,b){return Math.abs(a[0]-b[0])*.28+Math.abs(a[1]-b[1])*.38+Math.abs(a[2]-b[2])*.22+Math.abs(a[3]-b[3])*.12;}
+function featureDistance(a,b){return Math.abs(a[0]-b[0])*.18+Math.abs(a[1]-b[1])*.24+Math.abs(a[2]-b[2])*.14+Math.abs(a[3]-b[3])*.25+Math.abs(a[4]-b[4])*.32;}
 function median(values){const sorted=[...values].sort((a,b)=>a-b);const middle=Math.floor(sorted.length/2);return sorted.length%2?sorted[middle]:(sorted[middle-1]+sorted[middle])/2;}
 function compensateLighting(features,baseline){
-  const shift=Array.from({length:4},(_,feature)=>median(features.map((square,index)=>square[feature]-baseline[index][feature])));
+  const shift=Array.from({length:features[0].length},(_,feature)=>median(features.map((square,index)=>square[feature]-baseline[index][feature])));
   return features.map(square=>square.map((value,feature)=>value-shift[feature]));
 }
 function cameraSquare(index){const row=Math.floor(index/8),col=index%8;const file=boardFlipped?7-col:col;const rank=boardFlipped?row+1:8-row;return 'abcdefgh'[file]+rank;}
@@ -402,15 +408,22 @@ function setBoardWatch(text,stateName='watching'){
   const label=document.querySelector('#board-watch');label.lastChild.textContent=` ${text}`;label.dataset.state=stateName;
 }
 
-function startBoardVision(){
+async function startBoardVision(){
   clearInterval(visionTimer);boardBaseline=null;previousFeatures=null;motionSeen=false;settledFrames=0;stableSignature='';stableSignatureFrames=0;
   setBoardWatch('HOLD STILL — LEARNING POSITION','learning');
-  setTimeout(()=>{
-    boardBaseline=captureFeatures();previousFeatures=boardBaseline;
-    if(!boardBaseline){setBoardWatch('CAMERA NOT READY','error');return;}
-    setBoardWatch(expectedPhysicalMove?'WAITING FOR SKY’S PIECE':'WATCHING PHYSICAL BOARD');
-    visionTimer=setInterval(analyzeBoard,320);
-  },1800);
+  const samples=[];
+  for(let i=0;i<12;i++){
+    await new Promise(resolve=>setTimeout(resolve,150));
+    const frame=captureFeatures();if(frame)samples.push(frame);
+    setBoardWatch(`HOLD STILL — LEARNING ${samples.length}/12`,'learning');
+  }
+  if(samples.length<8){setBoardWatch('CAMERA NOT READY','error');return;}
+  boardBaseline=Array.from({length:64},(_,square)=>Array.from({length:samples[0][square].length},(_,feature)=>samples.reduce((sum,frame)=>sum+frame[square][feature],0)/samples.length));
+  const compensated=samples.map(frame=>compensateLighting(frame,boardBaseline));
+  verificationNoise=Array.from({length:64},(_,square)=>Math.max(.6,...compensated.map(frame=>featureDistance(frame[square],boardBaseline[square]))));
+  previousFeatures=compensated[compensated.length-1];
+  setBoardWatch(expectedPhysicalMove?'WAITING FOR SKY’S PIECE':'WATCHING PHYSICAL BOARD');
+  visionTimer=setInterval(analyzeBoard,320);
 }
 
 function stopGameResources(){
@@ -455,18 +468,20 @@ async function analyzeBoard(){
   const peakMotion=Math.max(...liveScores);
   const changes=current.map((item,i)=>({index:i,score:featureDistance(item,boardBaseline[i])})).sort((a,b)=>b.score-a.score);
   previousFeatures=current;
-  const changed=changes.filter(change=>change.score>learnedChangeThreshold);
+  const changed=changes.filter(change=>change.score>squareChangeThreshold(change.index));
   document.querySelector('#vision-meter').textContent=`Δ ${changes[0].score.toFixed(1)} · ${changed.length} ${changed.length===1?'square':'squares'}`;
+  const movingSquares=liveScores.filter(score=>score>Math.max(5,learnedChangeThreshold)).length;
+  if(peakMotion>8&&movingSquares<=32){motionSeen=true;settledFrames=0;stableSignatureFrames=0;setBoardWatch('I SEE MOVEMENT — FINISH THE MOVE','motion');return;}
   if(changed.length>12){stableSignature='';stableSignatureFrames=0;settledFrames=0;setBoardWatch('CAMERA ADJUSTING LIGHT — HOLD STILL','learning');return;}
-  if(peakMotion>7.5){motionSeen=true;settledFrames=0;stableSignatureFrames=0;setBoardWatch('I SEE MOVEMENT — FINISH THE MOVE','motion');return;}
-  if(changed.length<1){stableSignature='';stableSignatureFrames=0;return;}
+  if(changed.length<1){stableSignature='';stableSignatureFrames=0;motionSeen=false;return;}
+  if(!motionSeen){setBoardWatch('IGNORING PASSIVE CAMERA CHANGE','learning');return;}
   const signature=changed.slice(0,6).map(change=>change.index).sort((a,b)=>a-b).join(',');
   if(signature===stableSignature)stableSignatureFrames++;else{stableSignature=signature;stableSignatureFrames=1;}
   if(liveMotion<2.8)settledFrames++;else settledFrames=0;
   if(stableSignatureFrames<4||settledFrames<3){setBoardWatch('BOARD CHANGED — HOLD STILL','thinking');return;}
   motionSeen=false;settledFrames=0;
   stableSignatureFrames=0;
-  const candidates=changed.slice(0,6);
+  const candidates=changed.slice(0,16);
   if(candidates.length<2){setBoardWatch('I SEE ONE SQUARE — WAITING FOR THE SECOND','thinking');return;}
   detectorBusy=true;setBoardWatch('CHECKING MOVE…','thinking');
   try{
@@ -499,18 +514,22 @@ function checkSkyPlacement(candidates,uci){
 }
 
 async function inferLegalMove(candidates){
-  const changedSquares=candidates.map(candidate=>cameraSquare(candidate.index));
-  const origins=changedSquares.filter(square=>pieceBelongsToHuman(state.pieces[square]));
+  const scores=new Map(candidates.map(candidate=>[cameraSquare(candidate.index),candidate.score]));
+  const origins=Object.entries(state.pieces).filter(([,piece])=>pieceBelongsToHuman(piece)).map(([square])=>square);
+  const hypotheses=[];
   for(const from of origins){
     const legalResponse=await fetch('/api/legal-moves',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({square:from})});
     const legal=(await legalResponse.json()).moves;
-    for(const to of changedSquares){
-      if(from===to||!legal.includes(to))continue;
-      const response=await fetch('/api/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from,to,promotion:'q'})});
-      if(response.ok)return await response.json();
-    }
+    for(const to of legal)hypotheses.push({from,to,score:(scores.get(from)||0)+(scores.get(to)||0),fromScore:scores.get(from)||0,toScore:scores.get(to)||0});
   }
-  return null;
+  hypotheses.sort((a,b)=>b.score-a.score);
+  const best=hypotheses[0],runnerUp=hypotheses[1];
+  if(!best)return null;
+  const fromThreshold=squareChangeThreshold(cameraIndex(best.from)),toThreshold=squareChangeThreshold(cameraIndex(best.to));
+  if(best.fromScore<fromThreshold||best.toScore<toThreshold)return null;
+  if(runnerUp&&best.score-runnerUp.score<Math.max(2,best.score*.08))return null;
+  const response=await fetch('/api/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:best.from,to:best.to,promotion:'q'})});
+  return response.ok?await response.json():null;
 }
 
 document.querySelector('#move-form').addEventListener('submit',async event=>{
