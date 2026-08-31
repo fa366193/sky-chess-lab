@@ -28,6 +28,7 @@ let settledFrames = 0;
 let detectorBusy = false;
 let expectedPhysicalMove = null;
 let sessionActive = false;
+let boardFlipped = false;
 
 function showScreen(name) { Object.entries(screens).forEach(([key,node]) => node.classList.toggle('active', key === name)); }
 
@@ -115,6 +116,7 @@ window.addEventListener('resize',resizeOverlay);
 
 document.querySelectorAll('[data-color]').forEach(button=>button.addEventListener('click',async()=>{
   humanColor=button.dataset.color;
+  boardFlipped=humanColor==='black';
   state=await (await fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({color:humanColor})})).json();
   document.querySelector('#color-label').textContent=humanColor.toUpperCase();
   sessionActive=true;showScreen('play'); updatePlay(); startPresence(); initializeVoice();
@@ -258,7 +260,9 @@ function captureFeatures() {
 }
 
 function featureDistance(a,b){return Math.abs(a[0]-b[0])*.28+Math.abs(a[1]-b[1])*.38+Math.abs(a[2]-b[2])*.22+Math.abs(a[3]-b[3])*.12;}
-function cameraSquare(index,flipped=false){const row=Math.floor(index/8),col=index%8;const file=flipped?7-col:col;const rank=flipped?row+1:8-row;return 'abcdefgh'[file]+rank;}
+function cameraSquare(index){const row=Math.floor(index/8),col=index%8;const file=boardFlipped?7-col:col;const rank=boardFlipped?row+1:8-row;return 'abcdefgh'[file]+rank;}
+function cameraIndex(square){const file='abcdefgh'.indexOf(square[0]),rank=Number(square[1]);const col=boardFlipped?7-file:file;const row=boardFlipped?rank-1:8-rank;return row*8+col;}
+function pieceBelongsToHuman(symbol){if(!symbol)return false;return humanColor==='white'?symbol===symbol.toUpperCase():symbol===symbol.toLowerCase();}
 
 function setBoardWatch(text,stateName='watching'){
   const label=document.querySelector('#board-watch');label.lastChild.textContent=` ${text}`;label.dataset.state=stateName;
@@ -323,8 +327,13 @@ async function analyzeBoard(){
   if(candidates.length<1)return;
   detectorBusy=true;setBoardWatch('CHECKING MOVE…','thinking');
   try{
-    if(expectedPhysicalMove&&matchesExpected(candidates,expectedPhysicalMove)){
-      boardBaseline=current;expectedPhysicalMove=null;setBoardWatch('SKY’S MOVE CONFIRMED');message.textContent='Perfect. The physical board and I are synchronized. Your turn.';setSkyPose('neutral');return;
+    if(expectedPhysicalMove){
+      const syncResult=checkSkyPlacement(candidates,expectedPhysicalMove);
+      if(syncResult.correct){
+        boardBaseline=current;expectedPhysicalMove=null;setBoardWatch('SKY’S MOVE CONFIRMED');message.textContent='Perfect—that is exactly where I wanted my piece. The physical board and I are synchronized. Your turn.';setSkyPose('happy');speakSky(message.textContent);return;
+      }
+      setBoardWatch('SKY’S PIECE IS ON THE WRONG SQUARE','error');
+      message.textContent=syncResult.message;setSkyPose('teaching');speakSky(message.textContent);return;
     }
     const detected=await inferLegalMove(candidates);
     if(detected){boardBaseline=current;state=detected;expectedPhysicalMove=state.lastSkyMove||null;updatePlay();setBoardWatch(expectedPhysicalMove?'WAITING FOR SKY’S PIECE':'WATCHING PHYSICAL BOARD');}
@@ -332,16 +341,31 @@ async function analyzeBoard(){
   }finally{detectorBusy=false;}
 }
 
-function matchesExpected(candidates,uci){
-  const names=new Set(candidates.flatMap(c=>[cameraSquare(c.index,false),cameraSquare(c.index,true)]));
-  return names.has(uci.slice(0,2))&&names.has(uci.slice(2,4));
+function checkSkyPlacement(candidates,uci){
+  const expectedFrom=uci.slice(0,2),expectedTo=uci.slice(2,4);
+  const changed=new Set(candidates.map(candidate=>candidate.index));
+  const fromSeen=changed.has(cameraIndex(expectedFrom));
+  const toSeen=changed.has(cameraIndex(expectedTo));
+  if(fromSeen&&toSeen)return {correct:true};
+  const changedSquares=candidates.slice(0,3).map(candidate=>cameraSquare(candidate.index));
+  if(fromSeen){
+    const observed=changedSquares.find(square=>square!==expectedFrom);
+    return {correct:false,message:observed?`That’s the correct piece, but I see it on ${observed}. Please move it to ${expectedTo}.`:`I saw you lift my piece from ${expectedFrom}, but I need it placed on ${expectedTo}.`};
+  }
+  return {correct:false,message:`I’m waiting for my announced move: ${expectedFrom} to ${expectedTo}. Please move that exact piece.`};
 }
 
 async function inferLegalMove(candidates){
-  for(const flipped of [false,true])for(const from of candidates)for(const to of candidates){
-    if(from.index===to.index)continue;
-    const response=await fetch('/api/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from:cameraSquare(from.index,flipped),to:cameraSquare(to.index,flipped),promotion:'q'})});
-    if(response.ok)return await response.json();
+  const changedSquares=candidates.map(candidate=>cameraSquare(candidate.index));
+  const origins=changedSquares.filter(square=>pieceBelongsToHuman(state.pieces[square]));
+  for(const from of origins){
+    const legalResponse=await fetch('/api/legal-moves',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({square:from})});
+    const legal=(await legalResponse.json()).moves;
+    for(const to of changedSquares){
+      if(from===to||!legal.includes(to))continue;
+      const response=await fetch('/api/move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({from,to,promotion:'q'})});
+      if(response.ok)return await response.json();
+    }
   }
   return null;
 }

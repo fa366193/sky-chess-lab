@@ -1,12 +1,56 @@
 import random
+import shutil
+from pathlib import Path
 
 import chess
+import chess.engine
 
 
 class SkyPlayer:
     """A quick, intentionally gentle opponent for the hackathon MVP."""
 
+    def __init__(self, use_engine=True):
+        self.engine = None
+        self.use_engine = use_engine
+
+    def _stockfish_path(self):
+        discovered = shutil.which("stockfish")
+        if discovered:
+            return discovered
+        homebrew = Path("/opt/homebrew/opt/stockfish/bin/stockfish")
+        return str(homebrew) if homebrew.exists() else None
+
+    def _engine(self):
+        if not self.use_engine:
+            return None
+        if self.engine is None:
+            path = self._stockfish_path()
+            if path:
+                self.engine = chess.engine.SimpleEngine.popen_uci(path)
+                options = self.engine.options
+                settings = {}
+                if "UCI_LimitStrength" in options:
+                    settings["UCI_LimitStrength"] = True
+                if "UCI_Elo" in options:
+                    minimum = options["UCI_Elo"].min or 1320
+                    settings["UCI_Elo"] = max(minimum, 1450)
+                if settings:
+                    self.engine.configure(settings)
+        return self.engine
+
     def choose_move(self, board):
+        engine = self._engine()
+        if engine:
+            try:
+                return engine.play(board, chess.engine.Limit(time=0.35)).move
+            except (chess.engine.EngineError, chess.engine.EngineTerminatedError):
+                pass
+            finally:
+                try:
+                    engine.quit()
+                except chess.engine.EngineError:
+                    pass
+                self.engine = None
         moves = list(board.legal_moves)
         captures = [move for move in moves if board.is_capture(move)]
         checks = [move for move in moves if board.gives_check(move)]

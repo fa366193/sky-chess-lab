@@ -42,11 +42,18 @@ desk. There is intentionally no digital chessboard in the play interface.
 Press **Hear Sky** to use the browser's built-in voice. After color selection,
 the camera learns a baseline of all 64 physical squares. It waits for hand
 motion to finish, compares the settled position with that baseline, and accepts
-only a changed-square pair that matches a legal chess move. When Sky announces
-a move, the detector switches to synchronization mode until her physical piece
-has been moved. The collapsible recovery control beneath the room scene remains
+only a changed-square pair that belongs to the player's selected color and
+matches a legal move. Board orientation is locked from the selected side. When
+Sky announces a move, the detector switches to strict synchronization mode and
+accepts only her exact announced origin and destination. A wrong destination
+produces a spoken correction without advancing the game. The collapsible
+recovery control beneath the room scene remains
 available for difficult lighting conditions and accepts notation such as
 `e2e4`.
+
+Sky uses Stockfish 18 at bounded strength for strategic move selection. The
+rule-based legal player remains available automatically if Stockfish is not
+installed.
 
 ## Calibrate the physical board
 

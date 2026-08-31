@@ -11,7 +11,7 @@ class ChessGameTests(unittest.TestCase):
         self.assertEqual(game.legal_destinations("e2"), ["e3", "e4"])
         result = game.play("e2", "e4")
         self.assertTrue(result.ok)
-        sky_move = SkyPlayer().choose_move(game.board)
+        sky_move = SkyPlayer(use_engine=False).choose_move(game.board)
         self.assertIn(sky_move, game.board.legal_moves)
 
     def test_illegal_move_is_rejected(self):
