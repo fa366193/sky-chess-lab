@@ -67,6 +67,13 @@ may ask for camera access on the first run; choose **Allow**. The standalone
 Sky appears throughout setup and gives a new spoken-style instruction after
 each selected corner.
 
+After the four corners, a required smart verification wizard prevents play
+until the real board passes four checks: Sky identifies the white `e2` pawn,
+identifies the black `e7` pawn, recognizes `e2 → e4`, and recognizes `e7 → e5`.
+Both pawns must be returned to their starting squares. These checks determine
+physical orientation and tune the change threshold from the actual camera,
+pieces, and lighting instead of inferring orientation from the player's color.
+
 ## Camera lifecycle
 
 - **Pause game** stops the camera, visual detector, microphone, and speech.

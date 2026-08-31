@@ -31,6 +31,13 @@ let sessionActive = false;
 let boardFlipped = false;
 let stableSignature = '';
 let stableSignatureFrames = 0;
+let verificationTimer = null;
+let verificationBaseline = null;
+let verificationPrevious = null;
+let verificationStep = -1;
+let verificationSignature = '';
+let verificationFrames = 0;
+let learnedChangeThreshold = 4.2;
 
 function showScreen(name) { Object.entries(screens).forEach(([key,node]) => node.classList.toggle('active', key === name)); }
 
@@ -79,9 +86,12 @@ function drawCalibration() {
     ctx.strokeStyle='#64a0e3'; ctx.lineWidth=3*scale; ctx.stroke();
     if (points.length === 4) { ctx.fillStyle='rgba(92,145,215,.16)'; ctx.fill(); }
   }
+  const cornerNames=['TOP LEFT','TOP RIGHT','BOTTOM RIGHT','BOTTOM LEFT'];
   points.forEach((p,index)=>{
     ctx.beginPath(); ctx.arc(p.x*scale,p.y*scale,17*scale,0,Math.PI*2); ctx.fillStyle='#b95f2d'; ctx.fill(); ctx.strokeStyle='#fff8eb'; ctx.lineWidth=3*scale; ctx.stroke();
     ctx.fillStyle='#fff'; ctx.font=`600 ${15*scale}px Manrope`; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(String(index+1),p.x*scale,p.y*scale);
+    ctx.font=`600 ${9*scale}px DM Mono`;ctx.textAlign=index===1||index===2?'right':'left';ctx.fillStyle='#fff8eb';ctx.strokeStyle='rgba(20,43,67,.8)';ctx.lineWidth=3*scale;
+    const labelX=(p.x+(index===1||index===2?-24:24))*scale,labelY=p.y*scale;ctx.strokeText(cornerNames[index],labelX,labelY);ctx.fillText(cornerNames[index],labelX,labelY);
   });
 }
 
@@ -97,10 +107,7 @@ function updateSteps() {
   ];
   document.querySelector('#setup-message').textContent=stream?setupLines[points.length]:'Hi! First, allow camera access so I can help you frame the physical board.';
   document.querySelector('#setup-sky-image').src=`${window.SKY_ASSET_ROOT}/${points.length===4?skyAssets.happy:skyAssets.teaching}`;
-  if (points.length === 4) {
-    help.textContent = 'Board mapped. Keep the camera and board in this position.';
-    window.setTimeout(()=>showScreen('color'),650);
-  }
+  if (points.length === 4 && verificationStep < 0) beginSmartVerification();
 }
 
 view.addEventListener('click', event => {
@@ -112,13 +119,110 @@ view.addEventListener('click', event => {
 });
 
 document.querySelector('#enable-camera').addEventListener('click',enableCamera);
-document.querySelector('#reset-corners').addEventListener('click',()=>{points=[];localStorage.removeItem('skyChessCalibration');drawCalibration();updateSteps();help.textContent='Click the top-left inner corner first.';});
-document.querySelector('#recalibrate').addEventListener('click',()=>{clearInterval(visionTimer);visionTimer=null;points=[];drawCalibration();updateSteps();showScreen('calibration');});
+function resetVerificationUi(){document.querySelector('#corner-list').hidden=false;document.querySelector('#verification-panel').hidden=true;document.querySelector('#reset-corners').textContent='Reset points';}
+document.querySelector('#reset-corners').addEventListener('click',()=>{stopVerification();resetVerificationUi();points=[];localStorage.removeItem('skyChessCalibration');drawCalibration();updateSteps();help.textContent='Click the top-left inner corner first.';});
+document.querySelector('#recalibrate').addEventListener('click',()=>{clearInterval(visionTimer);visionTimer=null;stopVerification();resetVerificationUi();points=[];drawCalibration();updateSteps();showScreen('calibration');});
 window.addEventListener('resize',resizeOverlay);
+
+const verificationInstructions=[
+  ['Find the white side','Lift the white pawn on e2 and hold it above the board.'],
+  ['White identified','Return that white pawn to e2.'],
+  ['Find the black side','Lift the black pawn on e7 and hold it above the board.'],
+  ['Black identified','Return that black pawn to e7.'],
+  ['Test a white move','Move the white pawn from e2 to e4, then remove your hand.'],
+  ['Reset the white pawn','Return the white pawn from e4 to e2.'],
+  ['Test a black move','Move the black pawn from e7 to e5, then remove your hand.'],
+  ['Reset the black pawn','Return the black pawn from e5 to e7.']
+];
+
+function setVerificationPrompt(step,note=''){
+  verificationStep=step;
+  const [title,detail]=verificationInstructions[step]||['Board verified','Sky can identify both colors and complete moves.'];
+  document.querySelector('#verification-title').textContent=title;
+  document.querySelector('#verification-detail').textContent=detail;
+  document.querySelector('#verification-reading').textContent=note||'Watching for a stable change…';
+  document.querySelector('#setup-message').textContent=detail;
+  [...document.querySelectorAll('.verification-progress i')].forEach((dot,index)=>dot.classList.toggle('active',index<=Math.min(3,Math.floor(step/2))));
+  verificationSignature='';verificationFrames=0;
+}
+
+function stopVerification(){clearInterval(verificationTimer);verificationTimer=null;verificationStep=-1;verificationBaseline=null;}
+
+function beginSmartVerification(){
+  document.querySelector('#corner-list').hidden=true;
+  document.querySelector('#verification-panel').hidden=false;
+  document.querySelector('#reset-corners').textContent='Restart setup';
+  help.textContent='Now Sky will verify orientation, piece colors, and full move recognition.';
+  document.querySelector('#setup-message').textContent='Great. Keep every piece in its normal starting square while I learn the board.';
+  setTimeout(()=>{
+    verificationBaseline=captureFeatures();verificationPrevious=verificationBaseline;
+    if(!verificationBaseline){document.querySelector('#verification-reading').textContent='Camera frame unavailable. Restart setup.';return;}
+    setVerificationPrompt(0);
+    verificationTimer=setInterval(analyzeVerification,300);
+  },1800);
+}
+
+function verificationIndex(square,flipped){const file='abcdefgh'.indexOf(square[0]),rank=Number(square[1]);const col=flipped?7-file:file;const row=flipped?rank-1:8-rank;return row*8+col;}
+function closeToBaseline(features){return Math.max(...features.map((item,index)=>featureDistance(item,verificationBaseline[index])))<3.2;}
+
+function stableVerificationChanges(current){
+  const scores=current.map((item,index)=>({index,score:featureDistance(item,verificationBaseline[index])})).sort((a,b)=>b.score-a.score);
+  const changed=scores.filter(item=>item.score>learnedChangeThreshold).slice(0,6);
+  const live=Math.max(...current.map((item,index)=>featureDistance(item,verificationPrevious[index])));
+  verificationPrevious=current;
+  const signature=changed.map(item=>item.index).sort((a,b)=>a-b).join(',');
+  if(live<3.2&&signature&&signature===verificationSignature)verificationFrames++;else{verificationSignature=signature;verificationFrames=1;}
+  document.querySelector('#verification-reading').textContent=`Camera sees ${changed.length} changed ${changed.length===1?'square':'squares'} · signal ${scores[0].score.toFixed(1)}`;
+  return verificationFrames>=4?changed:null;
+}
+
+function containsSquares(changes,squares){const seen=new Set(changes.map(item=>item.index));return squares.every(square=>seen.has(cameraIndex(square)));}
+
+function advanceAfterReturn(nextStep,current){
+  if(!closeToBaseline(current))return false;
+  verificationBaseline=current;verificationPrevious=current;setVerificationPrompt(nextStep);return true;
+}
+
+function analyzeVerification(){
+  const current=captureFeatures();if(!current)return;
+  if([1,3,5,7].includes(verificationStep)){
+    if(!advanceAfterReturn(verificationStep+1,current))return;
+    if(verificationStep===8)finishVerification();
+    return;
+  }
+  const changes=stableVerificationChanges(current);if(!changes)return;
+  const strongest=changes[0];
+  if(verificationStep===0){
+    const normal=verificationIndex('e2',false),flipped=verificationIndex('e2',true);
+    if(strongest.index!==normal&&strongest.index!==flipped){document.querySelector('#verification-reading').textContent='That was not e2. Return it and lift the white e2 pawn.';return;}
+    boardFlipped=strongest.index===flipped;learnedChangeThreshold=Math.max(3,Math.min(8,strongest.score*.42));setVerificationPrompt(1,'White e2 recognized. Return it to e2.');return;
+  }
+  if(verificationStep===2){
+    if(strongest.index!==cameraIndex('e7')){document.querySelector('#verification-reading').textContent='That was not the black e7 pawn. Please try e7.';return;}
+    setVerificationPrompt(3,'Black e7 recognized. Return it to e7.');return;
+  }
+  if(verificationStep===4){
+    if(!containsSquares(changes,['e2','e4'])){document.querySelector('#verification-reading').textContent='I need to see exactly e2 and e4 change. Return the pawn and try again.';return;}
+    setVerificationPrompt(5,'White move e2 → e4 recognized. Now return it to e2.');return;
+  }
+  if(verificationStep===6){
+    if(!containsSquares(changes,['e7','e5'])){document.querySelector('#verification-reading').textContent='I need to see exactly e7 and e5 change. Return the pawn and try again.';return;}
+    setVerificationPrompt(7,'Black move e7 → e5 recognized. Now return it to e7.');
+  }
+}
+
+function finishVerification(){
+  clearInterval(verificationTimer);verificationTimer=null;
+  document.querySelector('#verification-title').textContent='Board verified';
+  document.querySelector('#verification-detail').textContent='Sky recognized White, Black, e2 → e4, and e7 → e5.';
+  document.querySelector('#verification-reading').textContent='Orientation and sensitivity saved for this game.';
+  document.querySelector('#setup-message').textContent='Perfect—I can identify both sides and recognize complete moves. Now choose your color.';
+  document.querySelector('#setup-sky-image').src=`${window.SKY_ASSET_ROOT}/${skyAssets.happy}`;
+  setTimeout(()=>showScreen('color'),1200);
+}
 
 document.querySelectorAll('[data-color]').forEach(button=>button.addEventListener('click',async()=>{
   humanColor=button.dataset.color;
-  boardFlipped=humanColor==='black';
   state=await (await fetch('/api/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({color:humanColor})})).json();
   document.querySelector('#color-label').textContent=humanColor.toUpperCase();
   sessionActive=true;showScreen('play'); updatePlay(); startPresence(); initializeVoice();
@@ -304,7 +408,7 @@ async function endGame(){
 
 async function newGame(){
   document.querySelector('#end-modal').hidden=true;points=[];boardBaseline=null;expectedPhysicalMove=null;
-  localStorage.removeItem('skyChessCalibration');drawCalibration();updateSteps();showScreen('calibration');
+  stopVerification();resetVerificationUi();localStorage.removeItem('skyChessCalibration');drawCalibration();updateSteps();showScreen('calibration');
   document.querySelector('#enable-camera').disabled=false;document.querySelector('#enable-camera').textContent='Enable camera';
   await enableCamera();
 }
@@ -322,7 +426,7 @@ async function analyzeBoard(){
   const peakMotion=Math.max(...liveScores);
   const changes=current.map((item,i)=>({index:i,score:featureDistance(item,boardBaseline[i])})).sort((a,b)=>b.score-a.score);
   previousFeatures=current;
-  const changed=changes.filter(change=>change.score>4.2);
+  const changed=changes.filter(change=>change.score>learnedChangeThreshold);
   document.querySelector('#vision-meter').textContent=`Δ ${changes[0].score.toFixed(1)} · ${changed.length} ${changed.length===1?'square':'squares'}`;
   if(peakMotion>7.5){motionSeen=true;settledFrames=0;stableSignatureFrames=0;setBoardWatch('I SEE MOVEMENT — FINISH THE MOVE','motion');return;}
   if(changed.length<1){stableSignature='';stableSignatureFrames=0;return;}
